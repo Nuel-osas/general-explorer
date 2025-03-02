@@ -206,11 +206,21 @@ class WalAirdropExplorer {
                 };
                 console.log('Using SUI token filter');
             } else if (selectedType === 'custom') {
-                const customContract = this.customObjectInput.value.trim();
+                let customContract = this.customObjectInput.value.trim();
                 console.log('Custom contract input value:', customContract);
                 
                 if (!customContract) {
                     throw new Error('Please enter a custom contract address');
+                }
+
+                // Check if custom contract is a SuiNS domain (case-insensitive)
+                if (customContract.toLowerCase().endsWith('.sui')) {
+                    // Convert to lowercase for consistent resolution
+                    const resolvedAddress = await this.resolveSuiNSDomain(customContract.toLowerCase());
+                    if (!resolvedAddress) {
+                        throw new Error(`Could not resolve SuiNS domain: ${customContract}`);
+                    }
+                    customContract = resolvedAddress;
                 }
 
                 // Format for token contracts
@@ -225,16 +235,6 @@ class WalAirdropExplorer {
                     }
                 } else {
                     structType = customContract;
-                }
-
-                // Check if custom contract is a SuiNS domain
-                if (structType.toLowerCase().endsWith('.sui')) {
-                    // Convert to lowercase for consistent resolution
-                    const resolvedAddress = await this.resolveSuiNSDomain(structType.toLowerCase());
-                    if (!resolvedAddress) {
-                        throw new Error(`Could not resolve SuiNS domain: ${structType}`);
-                    }
-                    structType = resolvedAddress;
                 }
 
                 console.log('Using struct type:', structType);
@@ -285,6 +285,25 @@ class WalAirdropExplorer {
     showLoading() {
         this.loadingSpinner.classList.remove('hidden');
         this.transactionContainer.innerHTML = '';
+        
+        // Add shimmer loading effect
+        setTimeout(() => {
+            if (!this.loadingSpinner.classList.contains('hidden')) {
+                this.transactionContainer.innerHTML = `
+                    <div class="grid gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                        ${Array(8).fill().map(() => `
+                            <div class="transaction-item bg-gray-800/30 rounded-xl overflow-hidden">
+                                <div class="aspect-square shimmer"></div>
+                                <div class="p-3 space-y-2">
+                                    <div class="h-4 w-3/4 bg-gray-700/50 rounded shimmer"></div>
+                                    <div class="h-3 w-full bg-gray-700/50 rounded shimmer"></div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+        }, 500);
     }
 
     hideLoading() {
@@ -299,13 +318,13 @@ class WalAirdropExplorer {
     renderWalletAirdrops(objects, address, searchTerm) {
         if (!objects || objects.length === 0) {
             this.transactionContainer.innerHTML = `
-                <div class="flex flex-col items-center justify-center py-8 text-center">
-                    <div class="w-20 h-20 mb-4 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                        <svg class="w-10 h-10 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="flex flex-col items-center justify-center py-12 text-center fade-in">
+                    <div class="w-24 h-24 mb-6 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                        <svg class="w-12 h-12 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                     </div>
-                    <h3 class="text-xl font-semibold mb-2">No Objects Found</h3>
+                    <h3 class="text-2xl font-semibold mb-3">No Objects Found</h3>
                     <p class="text-gray-400 max-w-md">
                         ${searchTerm.toLowerCase().endsWith('.sui') 
                             ? `No objects were found for ${searchTerm.toLowerCase()} (${this.formatAddress(address)})`
@@ -334,7 +353,7 @@ class WalAirdropExplorer {
             });
 
             this.transactionContainer.innerHTML = `
-                <div class="mb-6 text-center">
+                <div class="mb-8 text-center fade-in">
                     <div class="inline-flex items-center px-4 py-2 rounded-full bg-primary-500/10 text-primary-400 mb-3">
                         ${searchTerm.toLowerCase().endsWith('.sui') ? `
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -349,7 +368,7 @@ class WalAirdropExplorer {
                             ${this.formatAddress(address)}
                         `}
                     </div>
-                    <h2 class="text-2xl font-semibold mb-1">${selectedType === 'sui' ? 'SUI Balance' : `${tokenName} Balance`}</h2>
+                    <h2 class="text-3xl font-bold mb-2">${selectedType === 'sui' ? 'SUI Balance' : `${tokenName} Balance`}</h2>
                 </div>
                 <div class="flex justify-center">
                     ${this.renderTokenBalance(totalBalance, tokenType)}
@@ -359,13 +378,13 @@ class WalAirdropExplorer {
         }
 
         // For WAL Airdrops, use a more compact grid
-        const gridClasses = objects.length === 1 ? 'md:grid-cols-3' : 
+        const gridClasses = objects.length === 1 ? 'md:grid-cols-2' : 
                           objects.length === 2 ? 'md:grid-cols-3' : 
-                          'md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6';
+                          'md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5';
 
         this.transactionContainer.innerHTML = `
-            <div class="mb-4 text-center">
-                <div class="inline-flex items-center px-4 py-2 rounded-full bg-primary-500/10 text-primary-400 mb-2">
+            <div class="mb-6 text-center fade-in">
+                <div class="inline-flex items-center px-4 py-2 rounded-full bg-primary-500/10 text-primary-400 mb-3">
                     ${searchTerm.toLowerCase().endsWith('.sui') ? `
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
@@ -379,17 +398,20 @@ class WalAirdropExplorer {
                         ${this.formatAddress(address)}
                     `}
                 </div>
-                <h2 class="text-xl font-semibold mb-1">WAL Airdrop Collection</h2>
+                <h2 class="text-2xl font-bold mb-1">WAL Airdrop Collection</h2>
                 <p class="text-gray-400 text-sm">Found ${objects.length} object${objects.length === 1 ? '' : 's'}</p>
             </div>
-            <div class="grid gap-3 ${gridClasses}">
-                ${objects.map(object => {
+            <div class="grid gap-4 ${gridClasses} fade-in">
+                ${objects.map((object, index) => {
                     const display = object.data.display?.data || {};
                     const imageUrl = display.image_url || 'https://placehold.co/400x400?text=No+Image';
                     const name = display.name || 'WAL Airdrop';
                     const description = display.description || 'No description available';
                     
-                    return this.renderWalAirdropCard(imageUrl, name, description, object.data.objectId);
+                    // Add animation delay based on index for staggered appearance
+                    const animationDelay = `style="animation-delay: ${index * 0.05}s"`;
+                    
+                    return this.renderWalAirdropCard(imageUrl, name, description, object.data.objectId, animationDelay);
                 }).join('')}
             </div>
         `;
@@ -402,12 +424,15 @@ class WalAirdropExplorer {
         });
         const tokenName = type ? type.split('::').pop().replace(/[<>]/g, '') : 'Token';
         return `
-            <div class="max-w-md w-full">
-                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary-500/10 p-8">
+            <div class="max-w-md w-full fade-in float-animation">
+                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.03] hover:shadow-lg hover:shadow-primary-500/20 p-8">
                     <div class="flex items-center justify-center mb-6">
-                        <svg class="w-16 h-16 text-primary-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                        <div class="relative">
+                            <div class="absolute inset-0 bg-primary-500/20 rounded-full animate-pulse"></div>
+                            <svg class="w-20 h-20 text-primary-500 relative" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
                     </div>
                     <div class="text-center">
                         <h3 class="text-3xl font-bold text-white mb-2">${formattedBalance} ${tokenName}</h3>
@@ -419,20 +444,23 @@ class WalAirdropExplorer {
         `;
     }
 
-    renderWalAirdropCard(imageUrl, name, description, objectId) {
+    renderWalAirdropCard(imageUrl, name, description, objectId, animationDelay = '') {
         return `
-            <div class="group">
-                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary-500/10">
+            <div class="group fade-in" ${animationDelay}>
+                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-xl overflow-hidden transition-all duration-300 hover:scale-[1.05] hover:shadow-lg hover:shadow-primary-500/20">
                     <div class="aspect-square overflow-hidden">
                         <img src="${imageUrl}" 
                              alt="${name}"
-                             class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                             class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                              onerror="this.src='https://placehold.co/400x400?text=Error+Loading+Image'">
                     </div>
-                    <div class="p-2">
+                    <div class="p-3">
                         <h3 class="text-sm font-semibold text-white/90 truncate">${name}</h3>
                         <p class="text-xs text-gray-400 truncate">${description}</p>
-                        <div class="text-[10px] text-gray-500 mt-1 truncate">${this.formatAddress(objectId)}</div>
+                        <div class="flex items-center mt-2">
+                            <div class="text-[10px] text-gray-500 truncate flex-1">${this.formatAddress(objectId)}</div>
+                            <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -446,12 +474,15 @@ class WalAirdropExplorer {
         });
         const tokenName = type ? type.split('::').pop().replace(/[<>]/g, '') : 'Token';
         return `
-            <div class="group">
-                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary-500/10 p-6">
+            <div class="group fade-in">
+                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.05] hover:shadow-lg hover:shadow-primary-500/20 p-6">
                     <div class="flex items-center justify-center mb-4">
-                        <svg class="w-12 h-12 text-primary-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                        <div class="relative">
+                            <div class="absolute inset-0 bg-primary-500/20 rounded-full animate-pulse"></div>
+                            <svg class="w-14 h-14 text-primary-500 relative" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
                     </div>
                     <div class="text-center">
                         <h3 class="text-2xl font-bold text-white mb-1">${formattedBalance} ${tokenName}</h3>
@@ -464,8 +495,8 @@ class WalAirdropExplorer {
 
     renderGenericObjectCard(type, fields) {
         return `
-            <div class="group">
-                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary-500/10 p-6">
+            <div class="group fade-in">
+                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.05] hover:shadow-lg hover:shadow-primary-500/20 p-6">
                     <div class="mb-4">
                         <h3 class="text-base font-semibold text-white/90 truncate">${type.split('::').pop()}</h3>
                         <p class="text-xs text-gray-500 truncate">${type}</p>
@@ -485,13 +516,13 @@ class WalAirdropExplorer {
 
     showError(message) {
         this.transactionContainer.innerHTML = `
-            <div class="flex flex-col items-center justify-center py-12 text-center">
+            <div class="flex flex-col items-center justify-center py-12 text-center fade-in">
                 <div class="w-24 h-24 mb-6 rounded-full bg-red-500/10 flex items-center justify-center">
                     <svg class="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </div>
-                <h3 class="text-xl font-semibold mb-2">Error</h3>
+                <h3 class="text-2xl font-semibold mb-3">Error</h3>
                 <p class="text-gray-400 max-w-md">
                     ${message}
                 </p>
