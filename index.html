@@ -35,38 +35,57 @@
 </head>
 <body class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white min-h-screen">
     <div class="max-w-5xl mx-auto p-6">
-        <div class="text-center mb-10">
-            <h1 class="text-4xl font-bold mb-4 bg-gradient-to-r from-primary-300 to-primary-500 text-transparent bg-clip-text">
-                WAL Airdrop Explorer
-            </h1>
-            <p class="text-gray-400 text-lg max-w-xl mx-auto">
-                Discover and track WAL Airdrops across the Sui network. Enter any wallet address to view their collection.
-            </p>
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold mb-2 bg-gradient-to-r from-primary-400 to-primary-600 text-transparent bg-clip-text">Sui Object Explorer</h1>
+            <p class="text-gray-400">Search for objects by wallet address or SuiNS domain</p>
         </div>
-        
-        <div class="mb-10">
-            <div class="max-w-2xl mx-auto">
-                <div class="relative">
-                    <input type="text" 
-                           id="searchInput" 
-                           placeholder="Enter wallet address or SuiNS domain (e.g., name.sui)..." 
-                           class="w-full px-6 py-3 bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-2xl focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 text-white text-lg transition-all placeholder-gray-500">
-                    <button id="clearButton"
-                            class="absolute hidden right-[100px] top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-white transition-colors"
-                            title="Clear search">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                    <button id="searchButton" 
-                            class="absolute right-2 top-1/2 -translate-y-1/2 px-5 py-1.5 bg-primary-500 hover:bg-primary-600 rounded-xl transition-colors text-white font-medium">
-                        Search
-                    </button>
-                </div>
-                <p class="text-sm text-gray-400 mt-3 text-center">
-                    Try searching for a wallet address that owns WAL Airdrops
-                </p>
+
+        <!-- Object Type Selector -->
+        <div class="relative mb-4">
+            <select id="objectTypeSelect" 
+                    class="w-full px-6 py-3 bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-2xl focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 text-white text-lg transition-all appearance-none cursor-pointer">
+                <option value="walairdrop">WAL Airdrop NFTs</option>
+                <option value="sui">SUI Tokens</option>
+                <option value="custom">Custom Contract</option>
+            </select>
+            <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
             </div>
+        </div>
+
+        <!-- Custom Input (hidden by default) -->
+        <div id="customInputContainer" class="hidden mb-4">
+            <div class="relative">
+                <input type="text" 
+                       id="customObjectInput" 
+                       placeholder="Enter contract address (e.g., 0x2::coin::Coin<0x2::sui::SUI>)" 
+                       class="w-full px-6 py-3 bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-2xl focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 text-white text-lg transition-all placeholder-gray-500">
+            </div>
+        </div>
+
+        <!-- Search Input -->
+        <div class="relative">
+            <input type="text" 
+                   id="searchInput" 
+                   placeholder="Enter wallet address or SuiNS domain (e.g., name.sui)..." 
+                   class="w-full px-6 py-3 bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-2xl focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 text-white text-lg transition-all placeholder-gray-500">
+            <button id="clearButton"
+                    class="absolute hidden right-[100px] top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-white transition-colors"
+                    title="Clear search">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            <button id="searchButton" 
+                    class="absolute right-2 top-1/2 -translate-y-1/2 px-5 py-1.5 bg-primary-500 hover:bg-primary-600 rounded-xl transition-colors text-white font-medium">
+                Search
+            </button>
+        </div>
+        <p class="text-sm text-gray-400 mt-3 text-center">
+            Try searching for a wallet address that owns WAL Airdrops
+        </p>
         </div>
         
         <div class="loading-spinner hidden flex justify-center items-center py-12">

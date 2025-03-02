@@ -2,6 +2,27 @@ class WalAirdropExplorer {
     constructor() {
         console.log('WalAirdropExplorer constructor called');
         this.apiUrl = 'https://fullnode.mainnet.sui.io:443';
+        
+        // Default to WALAirdrop
+        this.currentFilter = {
+            type: 'struct',
+            value: '0x98af8b8fde88f3c4bdf0fcedcf9afee7d10f66d480b74fb5a3a2e23dc7f5a564::airdrop::WALAirdrop'
+        };
+    }
+
+    setFilter(contractAddress) {
+        this.currentFilter = {
+            type: 'struct',
+            value: contractAddress
+        };
+    }
+
+    getQueryFilter() {
+        return {
+            MatchAll: [{
+                StructType: '0x98af8b8fde88f3c4bdf0fcedcf9afee7d10f66d480b74fb5a3a2e23dc7f5a564::airdrop::WALAirdrop'
+            }]
+        };
     }
 
     initialize() {
@@ -11,11 +32,36 @@ class WalAirdropExplorer {
         this.searchInput = document.getElementById('searchInput');
         this.searchButton = document.getElementById('searchButton');
         this.clearButton = document.getElementById('clearButton');
+        this.objectTypeSelect = document.getElementById('objectTypeSelect');
+        this.customInputContainer = document.getElementById('customInputContainer');
+        this.customObjectInput = document.getElementById('customObjectInput');
         
-        if (!this.transactionContainer || !this.loadingSpinner || !this.searchInput || !this.searchButton || !this.clearButton) {
+        if (!this.transactionContainer || !this.loadingSpinner || !this.searchInput || 
+            !this.searchButton || !this.clearButton || !this.objectTypeSelect || 
+            !this.customInputContainer || !this.customObjectInput) {
             console.error('Could not find required DOM elements');
             return;
         }
+
+        // Object type selection handling
+        this.objectTypeSelect.addEventListener('change', () => {
+            const selectedValue = this.objectTypeSelect.value;
+            this.customInputContainer.classList.toggle('hidden', selectedValue !== 'custom');
+            
+            if (selectedValue === 'walairdrop') {
+                this.setFilter('0x98af8b8fde88f3c4bdf0fcedcf9afee7d10f66d480b74fb5a3a2e23dc7f5a564::airdrop::WALAirdrop');
+            } else if (selectedValue === 'sui') {
+                this.setFilter('0x2::coin::Coin<0x2::sui::SUI>');
+            }
+        });
+
+        // Custom contract input handling
+        this.customObjectInput.addEventListener('input', () => {
+            const value = this.customObjectInput.value.trim();
+            if (value) {
+                this.setFilter(value);
+            }
+        });
 
         // Add event listeners for search
         this.searchButton.addEventListener('click', () => this.handleSearch());
@@ -105,30 +151,90 @@ class WalAirdropExplorer {
     async handleSearch() {
         const searchTerm = this.searchInput.value.trim();
         if (!searchTerm) {
-            this.renderError({ message: 'Please enter a wallet address or SuiNS domain' });
+            this.showError('Please enter a wallet address or SuiNS domain');
             return;
         }
 
+        this.showLoading();
         try {
-            this.showLoading();
-            
-            // Check if this is a SuiNS domain and normalize to lowercase
             let address = searchTerm;
+            
+            // If it's a .sui domain, resolve it first
             if (searchTerm.toLowerCase().endsWith('.sui')) {
-                try {
-                    // Always convert SuiNS domains to lowercase
-                    const normalizedDomain = searchTerm.toLowerCase();
-                    address = await this.resolveSuiNSDomain(normalizedDomain);
-                    if (!address) {
-                        throw new Error(`No address found for SuiNS domain "${normalizedDomain}"`);
-                    }
-                } catch (error) {
-                    this.hideLoading();
-                    this.renderError(error);
-                    return;
+                address = await this.resolveSuiNSDomain(searchTerm);
+                if (!address) {
+                    throw new Error(`Could not resolve SuiNS domain: ${searchTerm}`);
                 }
             }
 
+            // Validate the address format
+            if (!address.startsWith('0x') || address.length !== 66) {
+                throw new Error('Invalid wallet address format');
+            }
+
+            // Prepare the query based on selected type
+            const selectedType = this.objectTypeSelect.value;
+            console.log('Selected type:', selectedType);
+
+            let query = {
+                owner: address,
+                limit: 50,
+                options: {
+                    showContent: true,
+                    showDisplay: true,
+                    showType: true
+                }
+            };
+
+            // Add filter based on object type
+            if (selectedType === 'walairdrop') {
+                query.filter = {
+                    MatchAll: [{
+                        StructType: '0x98af8b8fde88f3c4bdf0fcedcf9afee7d10f66d480b74fb5a3a2e23dc7f5a564::airdrop::WALAirdrop'
+                    }]
+                };
+                console.log('Using WAL Airdrop filter');
+            } else if (selectedType === 'sui') {
+                query.filter = {
+                    MatchAll: [{
+                        StructType: '0x2::coin::Coin<0x2::sui::SUI>'
+                    }]
+                };
+                console.log('Using SUI token filter');
+            } else if (selectedType === 'custom') {
+                const customContract = this.customObjectInput.value.trim();
+                console.log('Custom contract input value:', customContract);
+                
+                if (!customContract) {
+                    throw new Error('Please enter a custom contract address');
+                }
+
+                // Format for token contracts
+                let structType;
+                if (customContract.includes('::')) {
+                    const parts = customContract.split('::');
+                    if (parts.length === 3) {
+                        // Format: 0xADDRESS::MODULE::TYPE
+                        structType = `0x2::coin::Coin<${parts[0]}::${parts[1]}::${parts[2]}>`;
+                    } else {
+                        structType = customContract;
+                    }
+                } else {
+                    structType = customContract;
+                }
+
+                console.log('Using struct type:', structType);
+                query.filter = {
+                    MatchAll: [{
+                        StructType: structType
+                    }]
+                };
+            }
+
+            // Debug: Log the query being sent
+            console.log('Sending query:', JSON.stringify(query, null, 2));
+
+            // Make the API call
             const response = await fetch(this.apiUrl, {
                 method: 'POST',
                 headers: {
@@ -138,40 +244,28 @@ class WalAirdropExplorer {
                     jsonrpc: '2.0',
                     id: 1,
                     method: 'suix_getOwnedObjects',
-                    params: [
-                        address,
-                        {
-                            filter: {
-                                MatchAll: [
-                                    {
-                                        StructType: "0x98af8b8fde88f3c4bdf0fcedcf9afee7d10f66d480b74fb5a3a2e23dc7f5a564::airdrop::WALAirdrop"
-                                    }
-                                ]
-                            },
-                            options: {
-                                showContent: true,
-                                showType: true,
-                                showDisplay: true
-                            }
-                        }
-                    ]
+                    params: [address, query]
                 })
             });
-            
+
             const data = await response.json();
-            console.log('Search response:', data);
+            
+            // Debug: Log the full response
+            console.log('Full API response:', JSON.stringify(data, null, 2));
             
             if (data.error) {
-                throw new Error(data.error.message);
+                throw new Error(data.error.message || 'Failed to fetch wallet data');
             }
-            
-            this.hideLoading();
-            this.renderWalletAirdrops(data.result.data, address, searchTerm);
+
+            const objects = data.result.data || [];
+            this.renderWalletAirdrops(objects, address, searchTerm);
+
         } catch (error) {
-            console.error('Error searching wallet:', error);
-            this.hideLoading();
-            this.renderError(error);
+            console.error('Search error:', error);
+            this.showError(error.message);
         }
+
+        this.hideLoading();
     }
 
     showLoading() {
@@ -188,8 +282,8 @@ class WalAirdropExplorer {
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     }
 
-    renderWalletAirdrops(airdrops, address, searchTerm) {
-        if (!airdrops || airdrops.length === 0) {
+    renderWalletAirdrops(objects, address, searchTerm) {
+        if (!objects || objects.length === 0) {
             this.transactionContainer.innerHTML = `
                 <div class="flex flex-col items-center justify-center py-8 text-center">
                     <div class="w-20 h-20 mb-4 rounded-full bg-yellow-500/10 flex items-center justify-center">
@@ -197,24 +291,67 @@ class WalAirdropExplorer {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                     </div>
-                    <h3 class="text-xl font-semibold mb-2">No WAL Airdrops Found</h3>
+                    <h3 class="text-xl font-semibold mb-2">No Objects Found</h3>
                     <p class="text-gray-400 max-w-md">
                         ${searchTerm.toLowerCase().endsWith('.sui') 
-                            ? `No WAL Airdrops were found for ${searchTerm} (${this.formatAddress(address)})`
-                            : `No WAL Airdrops were found for address: ${this.formatAddress(address)}`}
+                            ? `No objects were found for ${searchTerm} (${this.formatAddress(address)})`
+                            : `No objects were found for address: ${this.formatAddress(address)}`}
                     </p>
                 </div>
             `;
             return;
         }
 
-        const gridClasses = airdrops.length === 1 ? 'md:grid-cols-2' : 
-                          airdrops.length === 2 ? 'md:grid-cols-2' : 
-                          'md:grid-cols-3 lg:grid-cols-4';
+        const selectedType = this.objectTypeSelect.value;
+
+        // For tokens, calculate total balance
+        if (selectedType === 'sui' || selectedType === 'custom') {
+            let totalBalance = 0n;
+            let tokenType = '';
+            let tokenName = '';
+
+            objects.forEach(object => {
+                const balance = BigInt(object.data.content?.fields?.balance || '0');
+                totalBalance += balance;
+                if (!tokenType && object.data.type) {
+                    tokenType = object.data.type;
+                    tokenName = tokenType.split('::').pop().replace(/[<>]/g, '');
+                }
+            });
+
+            this.transactionContainer.innerHTML = `
+                <div class="mb-6 text-center">
+                    <div class="inline-flex items-center px-4 py-2 rounded-full bg-primary-500/10 text-primary-400 mb-3">
+                        ${searchTerm.toLowerCase().endsWith('.sui') ? `
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                            </svg>
+                            ${searchTerm}
+                            <span class="text-xs ml-2 text-gray-400">(${this.formatAddress(address)})</span>
+                        ` : `
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            ${this.formatAddress(address)}
+                        `}
+                    </div>
+                    <h2 class="text-2xl font-semibold mb-1">${selectedType === 'sui' ? 'SUI Balance' : `${tokenName} Balance`}</h2>
+                </div>
+                <div class="flex justify-center">
+                    ${this.renderTokenBalance(totalBalance, tokenType)}
+                </div>
+            `;
+            return;
+        }
+
+        // For WAL Airdrops, use a more compact grid
+        const gridClasses = objects.length === 1 ? 'md:grid-cols-3' : 
+                          objects.length === 2 ? 'md:grid-cols-3' : 
+                          'md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6';
 
         this.transactionContainer.innerHTML = `
-            <div class="mb-6 text-center">
-                <div class="inline-flex items-center px-4 py-2 rounded-full bg-primary-500/10 text-primary-400 mb-3">
+            <div class="mb-4 text-center">
+                <div class="inline-flex items-center px-4 py-2 rounded-full bg-primary-500/10 text-primary-400 mb-2">
                     ${searchTerm.toLowerCase().endsWith('.sui') ? `
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
@@ -223,56 +360,110 @@ class WalAirdropExplorer {
                         <span class="text-xs ml-2 text-gray-400">(${this.formatAddress(address)})</span>
                     ` : `
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         ${this.formatAddress(address)}
                     `}
                 </div>
-                <h2 class="text-2xl font-semibold mb-1">WAL Airdrop Collection</h2>
-                <p class="text-gray-400 text-sm">Found ${airdrops.length} airdrop${airdrops.length === 1 ? '' : 's'}</p>
+                <h2 class="text-xl font-semibold mb-1">WAL Airdrop Collection</h2>
+                <p class="text-gray-400 text-sm">Found ${objects.length} object${objects.length === 1 ? '' : 's'}</p>
             </div>
-            <div class="grid gap-4 ${gridClasses}">
-                ${airdrops.map(airdrop => {
-                    const display = airdrop.data.display?.data || {};
+            <div class="grid gap-3 ${gridClasses}">
+                ${objects.map(object => {
+                    const display = object.data.display?.data || {};
                     const imageUrl = display.image_url || 'https://placehold.co/400x400?text=No+Image';
                     const name = display.name || 'WAL Airdrop';
                     const description = display.description || 'No description available';
                     
-                    return `
-                        <div class="group">
-                            <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary-500/10">
-                                <div class="aspect-square overflow-hidden">
-                                    <img src="${imageUrl}" 
-                                         alt="${name}"
-                                         class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                                         onerror="this.src='https://placehold.co/400x400?text=Error+Loading+Image'">
-                                </div>
-                                <div class="p-4">
-                                    <h3 class="text-base font-semibold mb-1 text-white/90 truncate">${name}</h3>
-                                    <p class="text-gray-400 text-xs mb-3 line-clamp-2">${description}</p>
-                                    
-                                    <div class="flex items-center justify-between pt-2 border-t border-gray-700/50">
-                                        <div class="text-xs">
-                                            <p class="text-gray-400 mb-0.5">Object ID</p>
-                                            <p class="font-mono text-primary-300">${this.formatAddress(airdrop.data.objectId)}</p>
-                                        </div>
-                                        <button class="copy-button ml-2 p-1.5 rounded-lg bg-primary-500/10 hover:bg-primary-500/20 transition-colors"
-                                                onclick="navigator.clipboard.writeText('${airdrop.data.objectId}')">
-                                            <svg class="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                    return this.renderWalAirdropCard(imageUrl, name, description, object.data.objectId);
                 }).join('')}
             </div>
         `;
     }
 
-    renderError(error) {
+    renderTokenBalance(balance, type) {
+        const formattedBalance = (Number(balance) / 1000000000).toFixed(6);
+        const tokenName = type ? type.split('::').pop().replace(/[<>]/g, '') : 'Token';
+        return `
+            <div class="max-w-md w-full">
+                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary-500/10 p-8">
+                    <div class="flex items-center justify-center mb-6">
+                        <svg class="w-16 h-16 text-primary-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="text-3xl font-bold text-white mb-2">${formattedBalance} ${tokenName}</h3>
+                        <p class="text-gray-400">Total Balance</p>
+                        ${type ? `<p class="text-xs text-gray-500 mt-2 break-all">${type}</p>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    renderWalAirdropCard(imageUrl, name, description, objectId) {
+        return `
+            <div class="group">
+                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary-500/10">
+                    <div class="aspect-square overflow-hidden">
+                        <img src="${imageUrl}" 
+                             alt="${name}"
+                             class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                             onerror="this.src='https://placehold.co/400x400?text=Error+Loading+Image'">
+                    </div>
+                    <div class="p-2">
+                        <h3 class="text-sm font-semibold text-white/90 truncate">${name}</h3>
+                        <p class="text-xs text-gray-400 truncate">${description}</p>
+                        <div class="text-[10px] text-gray-500 mt-1 truncate">${this.formatAddress(objectId)}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    renderSuiTokenCard(balance, type) {
+        const formattedBalance = (parseInt(balance) / 1000000000).toFixed(2);
+        const tokenName = type ? type.split('::').pop().replace(/[<>]/g, '') : 'Token';
+        return `
+            <div class="group">
+                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary-500/10 p-6">
+                    <div class="flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-primary-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="text-2xl font-bold text-white mb-1">${formattedBalance} ${tokenName}</h3>
+                        <p class="text-gray-400 text-sm">Balance</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    renderGenericObjectCard(type, fields) {
+        return `
+            <div class="group">
+                <div class="transaction-item bg-gray-800/50 backdrop-blur-sm rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary-500/10 p-6">
+                    <div class="mb-4">
+                        <h3 class="text-base font-semibold text-white/90 truncate">${type.split('::').pop()}</h3>
+                        <p class="text-xs text-gray-500 truncate">${type}</p>
+                    </div>
+                    <div class="space-y-2">
+                        ${Object.entries(fields).map(([key, value]) => `
+                            <div>
+                                <p class="text-xs text-gray-400">${key}</p>
+                                <p class="text-sm text-white truncate">${JSON.stringify(value)}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    showError(message) {
         this.transactionContainer.innerHTML = `
             <div class="flex flex-col items-center justify-center py-12 text-center">
                 <div class="w-24 h-24 mb-6 rounded-full bg-red-500/10 flex items-center justify-center">
@@ -282,7 +473,7 @@ class WalAirdropExplorer {
                 </div>
                 <h3 class="text-xl font-semibold mb-2">Error</h3>
                 <p class="text-gray-400 max-w-md">
-                    ${error.message}
+                    ${message}
                 </p>
             </div>
         `;
