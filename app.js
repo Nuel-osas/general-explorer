@@ -94,6 +94,9 @@ class WalAirdropExplorer {
 
     async resolveSuiNSDomain(domain) {
         try {
+            // Ensure domain is lowercase for consistent resolution
+            domain = domain.toLowerCase();
+            
             // First try the new method
             const response = await fetch(this.apiUrl, {
                 method: 'POST',
@@ -130,7 +133,7 @@ class WalAirdropExplorer {
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ name: domain })
+                    body: JSON.stringify({ name: domain.toLowerCase() })
                 });
                 
                 const altData = await altResponse.json();
@@ -159,9 +162,10 @@ class WalAirdropExplorer {
         try {
             let address = searchTerm;
             
-            // If it's a .sui domain, resolve it first
+            // If it's a .sui domain, resolve it first (case-insensitive check)
             if (searchTerm.toLowerCase().endsWith('.sui')) {
-                address = await this.resolveSuiNSDomain(searchTerm);
+                // Convert to lowercase for consistent resolution
+                address = await this.resolveSuiNSDomain(searchTerm.toLowerCase());
                 if (!address) {
                     throw new Error(`Could not resolve SuiNS domain: ${searchTerm}`);
                 }
@@ -221,6 +225,16 @@ class WalAirdropExplorer {
                     }
                 } else {
                     structType = customContract;
+                }
+
+                // Check if custom contract is a SuiNS domain
+                if (structType.toLowerCase().endsWith('.sui')) {
+                    // Convert to lowercase for consistent resolution
+                    const resolvedAddress = await this.resolveSuiNSDomain(structType.toLowerCase());
+                    if (!resolvedAddress) {
+                        throw new Error(`Could not resolve SuiNS domain: ${structType}`);
+                    }
+                    structType = resolvedAddress;
                 }
 
                 console.log('Using struct type:', structType);
@@ -294,7 +308,7 @@ class WalAirdropExplorer {
                     <h3 class="text-xl font-semibold mb-2">No Objects Found</h3>
                     <p class="text-gray-400 max-w-md">
                         ${searchTerm.toLowerCase().endsWith('.sui') 
-                            ? `No objects were found for ${searchTerm} (${this.formatAddress(address)})`
+                            ? `No objects were found for ${searchTerm.toLowerCase()} (${this.formatAddress(address)})`
                             : `No objects were found for address: ${this.formatAddress(address)}`}
                     </p>
                 </div>
@@ -326,7 +340,7 @@ class WalAirdropExplorer {
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
                             </svg>
-                            ${searchTerm}
+                            ${searchTerm.toLowerCase()}
                             <span class="text-xs ml-2 text-gray-400">(${this.formatAddress(address)})</span>
                         ` : `
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -356,7 +370,7 @@ class WalAirdropExplorer {
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
                         </svg>
-                        ${searchTerm}
+                        ${searchTerm.toLowerCase()}
                         <span class="text-xs ml-2 text-gray-400">(${this.formatAddress(address)})</span>
                     ` : `
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -382,7 +396,10 @@ class WalAirdropExplorer {
     }
 
     renderTokenBalance(balance, type) {
-        const formattedBalance = (Number(balance) / 1000000000).toFixed(6);
+        const formattedBalance = (Number(balance) / 1000000000).toLocaleString(undefined, { 
+            minimumFractionDigits: 6,
+            maximumFractionDigits: 6
+        });
         const tokenName = type ? type.split('::').pop().replace(/[<>]/g, '') : 'Token';
         return `
             <div class="max-w-md w-full">
@@ -423,7 +440,10 @@ class WalAirdropExplorer {
     }
 
     renderSuiTokenCard(balance, type) {
-        const formattedBalance = (parseInt(balance) / 1000000000).toFixed(2);
+        const formattedBalance = (parseInt(balance) / 1000000000).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
         const tokenName = type ? type.split('::').pop().replace(/[<>]/g, '') : 'Token';
         return `
             <div class="group">
